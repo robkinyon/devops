@@ -114,11 +114,9 @@ describe DevOps::DNS do
 
     it 'handles errors thrown' do
       expect(client).to receive(:list_hosted_zones).
-        and_throw(
-          Aws::Route53::Errors::ServiceError
-        )
+        and_raise(Aws::Route53::Errors::ServiceError.new(:context, 'message'))
 
-      expect(dns.zones).to eq({})
+      expect{ dns.zones }.to raise_error(DevOps::Error)
     end
   end
 
@@ -149,6 +147,21 @@ describe DevOps::DNS do
 
       # Ensure we can call it again without invoking the client
       expect(dns.ensure_zone('foo.test')).to eq(dns.zone_for('foo.test'))
+    end
+
+    it 'handles errors thrown' do
+      expect(client).to receive(:list_hosted_zones).
+        and_return(
+          Aws::Route53::Types::ListHostedZonesResponse.new(
+            hosted_zones: [],
+            is_truncated: false,
+          )
+        )
+      expect(client).to receive(:create_hosted_zone).
+        with(name: 'foo.test', caller_reference: "Creating zone foo.test").
+        and_raise(Aws::Route53::Errors::ServiceError.new(:context, 'message'))
+
+      expect{ dns.ensure_zone('foo.test') }.to raise_error(DevOps::Error)
     end
   end
 end

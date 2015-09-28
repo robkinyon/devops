@@ -1,4 +1,5 @@
 require 'devops/dns/zone'
+require 'devops/error'
 
 class DevOps
   class DNS
@@ -24,8 +25,8 @@ class DevOps
             caller_reference: "Creating zone #{name}",
           )
         rescue Aws::Route53::Errors::ServiceError => e
-          puts e
-          abort "FAILED"
+          #puts e
+          raise DevOps::Error
         end
 
         refresh_zones
@@ -49,8 +50,8 @@ class DevOps
           zones.concat rv.hosted_zones
         end
       rescue Aws::Route53::Errors::ServiceError => e
-        puts e
-        abort "FAILED"
+        #puts e
+        raise DevOps::Error
       end
 
       @zones = zones.map {|e|
