@@ -112,4 +112,34 @@ describe DevOps::DNS do
       expect(dns.zone_for('foo.test')).to eq(dns.zone_for('foo.test.'))
     end
   end
+
+  describe '#ensure_zone' do
+    it 'can create a zone' do
+      expect(client).to receive(:list_hosted_zones).
+        and_return(
+          Aws::Route53::Types::ListHostedZonesResponse.new(
+            hosted_zones: [],
+            is_truncated: false,
+          ),
+          Aws::Route53::Types::ListHostedZonesResponse.new(
+            hosted_zones: [
+              Aws::Route53::Types::HostedZone.new(
+                id: 'id for foo.test.',
+                name: 'foo.test.',
+              ),
+            ],
+            is_truncated: false,
+          )
+        )
+      expect(client).to receive(:create_hosted_zone).
+        with(name: 'foo.test', caller_reference: "Creating zone foo.test")
+
+      expect(dns.zone_for('foo.test')).to eq(nil)
+
+      expect(dns.ensure_zone('foo.test')).to be_an(DevOps::DNS::Zone)
+
+      # Ensure we can call it again without invoking the client
+      expect(dns.ensure_zone('foo.test')).to eq(dns.zone_for('foo.test'))
+    end
+  end
 end

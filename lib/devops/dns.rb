@@ -16,6 +16,23 @@ class DevOps
       zones[canonical(name)]
     end
 
+    def ensure_zone(name)
+      unless zone_for(name)
+        begin
+          rv = client.create_hosted_zone(
+            name: name,
+            caller_reference: "Creating zone #{name}",
+          )
+        rescue Aws::Route53::Errors::ServiceError => e
+          puts e
+          abort "FAILED"
+        end
+
+        refresh_zones
+      end
+      return zone_for(name)
+    end
+
     private
     def canonical(name)
       name[-1] == '.' ? name : "#{name}."
