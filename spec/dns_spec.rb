@@ -111,6 +111,15 @@ describe DevOps::DNS do
       expect(dns.zone_for('foo.test')).to be_an(DevOps::DNS::Zone)
       expect(dns.zone_for('foo.test')).to eq(dns.zone_for('foo.test.'))
     end
+
+    it 'handles errors thrown' do
+      expect(client).to receive(:list_hosted_zones).
+        and_throw(
+          Aws::Route53::Errors::ServiceError
+        )
+
+      expect(dns.zones).to eq({})
+    end
   end
 
   describe '#ensure_zone' do
