@@ -4,7 +4,7 @@ describe DevOps::DNS do
   let(:dns) { DevOps::DNS.new(client) }
 
   describe '#zones' do
-    it "can load no zones" do
+    it "can load zero zones" do
       expect(client).to receive(:list_hosted_zones).and_return(
         Aws::Route53::Types::ListHostedZonesResponse.new(
           hosted_zones: [],
@@ -27,7 +27,7 @@ describe DevOps::DNS do
           is_truncated: false,
         )
       )
-      expect(dns.zones.keys).to eq(['foo.test.'])
+      expect(dns.zones.keys).to match_array(['foo.test.'])
       expect(dns.zone_for('foo.test')).to be_an(DevOps::DNS::Zone)
       expect(dns.zone_for('foo.test')).to eq(dns.zone_for('foo.test.'))
     end
@@ -63,7 +63,7 @@ describe DevOps::DNS do
           )
         )
 
-      expect(dns.zones.keys).to eq(['foo.test.', 'bar.test.'])
+      expect(dns.zones.keys).to match_array(['foo.test.', 'bar.test.'])
       expect(dns.zone_for('foo.test')).to be_an(DevOps::DNS::Zone)
       expect(dns.zone_for('foo.test')).to eq(dns.zone_for('foo.test.'))
     end
@@ -107,7 +107,7 @@ describe DevOps::DNS do
           )
         )
 
-      expect(dns.zones.keys).to eq(['foo.test.', 'bar.test.', 'baz.test.'])
+      expect(dns.zones.keys).to match_array(['foo.test.', 'bar.test.', 'baz.test.'])
       expect(dns.zone_for('foo.test')).to be_an(DevOps::DNS::Zone)
       expect(dns.zone_for('foo.test')).to eq(dns.zone_for('foo.test.'))
     end
