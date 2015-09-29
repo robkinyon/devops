@@ -333,7 +333,7 @@ describe DevOps::DNS::Zone do
         )
       end
 
-      it 'defaults the name to the zone name' do
+      it 'defaults the name suffix to the zone name' do
         expect(client).to receive(:list_resource_record_sets).
           with(hosted_zone_id: 'id').
           and_return(
@@ -354,6 +354,115 @@ describe DevOps::DNS::Zone do
           'name'  => 'www',
           'value' => 'www2.foo.test',
           'type'  => 'CNAME',
+        )
+      end
+
+      it 'treats @ as the zone name' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
+        expect(zone).to receive(:issue_change_record).
+          with({
+            'action' => 'CREATE',
+            'name'   => 'foo.test',
+            'value'  => 'www2.foo.test',
+            'type'   => 'CNAME',
+          })
+
+        zone.ensure_record(
+          'name'  => '@',
+          'value' => 'www2.foo.test',
+          'type'  => 'CNAME',
+        )
+      end
+    end
+
+    describe 'type=ALIAS' do
+      it 'rejects a record without a name' do
+        expect {
+          zone.ensure_record({'type' => 'ALIAS'})
+        }.to raise_error(
+          DevOps::Error, "ensure_record requires a 'name'"
+        )
+      end
+
+      it 'creates a record with one value' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [
+                Aws::Route53::Types::ResourceRecordSet.new(
+                  name: 'www.foo.test.',
+                  type: 'A',
+                ),
+              ],
+              is_truncated: false,
+            )
+          )
+
+        # Get the target so .with() passes properly
+        target = zone.record_for('www')
+
+        expect(zone).to receive(:issue_change_record).
+          with({
+            'action' => 'CREATE',
+            'name'   => 'www2.foo.test',
+            'value'  => 'www',
+            'target' => target,
+            'type'   => 'ALIAS',
+          })
+
+        zone.ensure_record(
+          'name'  => 'www2',
+          'value' => 'www',
+        )
+      end
+
+      it 'calls the client with the right values' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [
+                Aws::Route53::Types::ResourceRecordSet.new(
+                  name: 'www.foo.test.',
+                  type: 'A',
+                ),
+              ],
+              is_truncated: false,
+            )
+          )
+
+        expect(client).to receive(:change_resource_record_sets).
+          with(
+            hosted_zone_id: zone.id,
+            change_batch: {
+              changes: [
+                {
+                  action: 'CREATE',
+                  resource_record_set: {
+                    name: 'www2.foo.test',
+                    type: 'A',
+                    alias_target: {
+                      hosted_zone_id: zone.id,
+                      dns_name: 'www.foo.test.',
+                      evaluate_target_health: false,
+                    },
+                  },
+                },
+              ],
+            },
+          )
+
+        zone.ensure_record(
+          'name'  => 'www2',
+          'value' => 'www',
         )
       end
     end

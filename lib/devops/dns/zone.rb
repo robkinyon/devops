@@ -3,11 +3,11 @@ require 'devops/dns/record'
 class DevOps
   class DNS
     class Zone
-      attr_reader :client, :id, :default_ttl, :name
+      attr_reader :client, :id, :default_ttl, :zone_name
       def initialize(client, data, default_ttl=600)
         @client = client
         @id = data.id
-        @name = data.name.gsub(/\.$/, '')
+        @zone_name = data.name.gsub(/\.$/, '')
         @default_ttl = default_ttl
       end
 
@@ -17,6 +17,10 @@ class DevOps
       end
 
       def record_for(name, type=nil)
+        unless name.match(/#{zone_name}$/)
+          name += '.' + zone_name
+        end
+
         return unless records.has_key?(name)
         if type
           return records[name][type]
@@ -36,12 +40,19 @@ class DevOps
 
       def ensure_record(record)
         if record.has_key?('value')
-          case record['value']
-          # A numeric IP address is a 'A' record
-          when /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/
-            record['type'] ||= 'A'
+          target = record_for(record['value'], 'A') ||
+                   record_for(record['value'], 'CNAME')
+          if target && !record['type']
+            record['type'] = 'ALIAS'
+            record['target'] = target
           else
-            record['type'] ||= 'CNAME'
+            case record['value']
+            # A numeric IP address is a 'A' record
+            when /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/
+              record['type'] ||= 'A'
+            else
+              record['type'] ||= 'CNAME'
+            end
           end
         end
 
@@ -57,7 +68,7 @@ class DevOps
           end
 
           # Default the name for MX records to the zone's name
-          record['name'] ||= name
+          record['name'] ||= zone_name
 
           record['records'] = record.delete('values').map {|item|
             ['priority', 'value'].each do |key|
@@ -73,8 +84,10 @@ class DevOps
             raise DevOps::Error, "ensure_record requires a 'name'"
           end
           # The AWS API requires fully-qualified names
-          unless record['name'].match(/#{name}$/)
-            record['name'] += '.' + name
+          if record['name'] == '@'
+            record['name'] = zone_name
+          elsif !record['name'].match(/#{zone_name}$/)
+            record['name'] += '.' + zone_name
           end
         end
 
@@ -96,23 +109,46 @@ class DevOps
         ]
 
         begin
-          client.change_resource_record_sets(
-            hosted_zone_id: id,
-            change_batch: {
-              changes: [
-                {
-                  action: record['action'],
-                  resource_record_set: {
-                    name: record['name'],
-                    type: record['type'],
-                    # ttl doesn't work with ALIAS records
-                    ttl: record['ttl'] || default_ttl,
-                    resource_records: record['records'],
+          if record['type'] == 'ALIAS'
+            client.change_resource_record_sets(
+              hosted_zone_id: id,
+              change_batch: {
+                changes: [
+                  {
+                    action: record['action'],
+                    resource_record_set: {
+                      name: record['name'],
+                      type: record['target'].type,
+                      alias_target: {
+                        # Currently, only intra-zone ALIASes are supported.
+                        hosted_zone_id: id,
+                        dns_name: record['target'].name,
+                        evaluate_target_health: false,
+                      },
+                    },
                   },
-                },
-              ],
-            },
-          )
+                ],
+              },
+            )
+          else
+            client.change_resource_record_sets(
+              hosted_zone_id: id,
+              change_batch: {
+                changes: [
+                  {
+                    action: record['action'],
+                    resource_record_set: {
+                      name: record['name'],
+                      type: record['type'],
+                      # ttl doesn't work with ALIAS records
+                      ttl: record['ttl'] || default_ttl,
+                      resource_records: record['records'],
+                    },
+                  },
+                ],
+              },
+            )
+          end
 
           # TODO: Ensure the record is INSYNC
         rescue Aws::Route53::Errors::ServiceError => e
