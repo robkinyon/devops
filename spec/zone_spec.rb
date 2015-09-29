@@ -97,14 +97,6 @@ describe DevOps::DNS::Zone do
           DevOps::Error, "ensure_record requires a 'type'"
         )
       end
-
-      it 'a record without a name' do
-        expect {
-          zone.ensure_record({'type' => 'A'})
-        }.to raise_error(
-          DevOps::Error, "ensure_record requires a 'name'"
-        )
-      end
     end
 
     describe 'type=MX' do
@@ -170,9 +162,44 @@ describe DevOps::DNS::Zone do
           ],
         )
       end
+
+      it 'defaults the name to the zone name' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
+        expect(zone).to receive(:issue_change_record).
+          with({
+            'action' => 'CREATE',
+            'type'   => 'MX',
+            'name'   => 'foo.test.',
+            'records' => [
+              { 'value' => '5 mail.route.net' },
+            ],
+          })
+
+        zone.ensure_record(
+          'type'   => 'MX',
+          'values' => [
+            { 'priority' => 5, 'value' => 'mail.route.net' },
+          ],
+        )
+      end
     end
 
     describe 'type=A' do
+      it 'rejects a record without a name' do
+        expect {
+          zone.ensure_record({'type' => 'A'})
+        }.to raise_error(
+          DevOps::Error, "ensure_record requires a 'name'"
+        )
+      end
+
       it 'creates a record with one value' do
         expect(client).to receive(:list_resource_record_sets).
           with(hosted_zone_id: 'id').
@@ -251,6 +278,14 @@ describe DevOps::DNS::Zone do
     end
 
     describe 'type=CNAME' do
+      it 'rejects a record without a name' do
+        expect {
+          zone.ensure_record({'type' => 'CNAME'})
+        }.to raise_error(
+          DevOps::Error, "ensure_record requires a 'name'"
+        )
+      end
+
       it 'creates a record with one value' do
         expect(client).to receive(:list_resource_record_sets).
           with(hosted_zone_id: 'id').

@@ -3,11 +3,12 @@ require 'devops/dns/record'
 class DevOps
   class DNS
     class Zone
-      attr_reader :client, :id, :default_ttl
-      def initialize(client, data)#, default_ttl=600)
+      attr_reader :client, :id, :default_ttl, :name
+      def initialize(client, data, default_ttl=600)
         @client = client
         @id = data.id
-        @default_ttl = 600#default_ttl
+        @name = data.name
+        @default_ttl = default_ttl
       end
 
       def records
@@ -44,10 +45,8 @@ class DevOps
           end
         end
 
-        ['type', 'name'].each do |key|
-          unless record.has_key?(key)
-            raise DevOps::Error, "ensure_record requires a '#{key}'"
-          end
+        unless record.has_key?('type')
+          raise DevOps::Error, "ensure_record requires a 'type'"
         end
 
         # Transform what we receive into what we expect.
@@ -56,6 +55,10 @@ class DevOps
           if !record['values']
             raise DevOps::Error, 'MX requires values to be set'
           end
+
+          # Default the name for MX records to the zone's name
+          record['name'] ||= name
+
           record['records'] = record.delete('values').map {|item|
             ['priority', 'value'].each do |key|
               unless item.has_key?(key)
@@ -65,6 +68,10 @@ class DevOps
 
             { 'value' => item.values_at('priority', 'value').join(' ') }
           }
+        else
+          unless record.has_key?('name')
+            raise DevOps::Error, "ensure_record requires a 'name'"
+          end
         end
 
         # This doesn't handle weighted sets (yet)
