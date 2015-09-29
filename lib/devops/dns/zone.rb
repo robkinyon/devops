@@ -4,10 +4,10 @@ class DevOps
   class DNS
     class Zone
       attr_reader :client, :id, :default_ttl
-      def initialize(client, data)
+      def initialize(client, data)#, default_ttl=600)
         @client = client
         @id = data.id
-        @default_ttl = 600
+        @default_ttl = 600#default_ttl
       end
 
       def records
@@ -34,35 +34,68 @@ class DevOps
       end
 
       def ensure_record(record)
-        unless record.has_key?('type')
-          raise DevOps::Error, "ensure_record requires a 'type'"
+        if record.has_key?('value')
+          case record['value']
+          # A numeric IP address is a 'A' record
+          when /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/
+            record['type'] ||= 'A'
+          else
+            record['type'] ||= 'CNAME'
+          end
         end
 
-        #case record['type']
-        #when 'MX'
-        #  if !record['values']
-        #    raise DevOps::Error, 'MX requires values OR value and optional priority'
-        #  end
+        ['type', 'name'].each do |key|
+          unless record.has_key?(key)
+            raise DevOps::Error, "ensure_record requires a '#{key}'"
+          end
+        end
+
+        # Transform what we receive into what we expect.
+        case record['type']
+        when 'MX'
+          if !record['values']
+            raise DevOps::Error, 'MX requires values to be set'
+          end
+          record['records'] = record.delete('values').map {|item|
+            ['priority', 'value'].each do |key|
+              unless item.has_key?(key)
+                raise DevOps::Error, "Missing #{key} in MX record"
+              end
+            end
+
+            { 'value' => item.values_at('priority', 'value').join(' ') }
+          }
+        end
+
+        # This doesn't handle weighted sets (yet)
+        #if record_for(record['name'], record['type'])
+        #  record['action'] = 'UPSERT'
+        #else
+        #  record['action'] = 'CREATE'
         #end
-        create_record(record)
+
+        issue_change_record(record)
       end
 
       private
 
-      def create_record(record)
+      def issue_change_record(record)
+        record['records'] ||= [
+          { value: record['value'] }
+        ]
+
         begin
           client.change_resource_record_sets(
             hosted_zone_id: id,
             change_batch: {
               changes: [
                 {
+                  action: record['action'],
                   name: record['name'],
                   type: record['type'],
                   # ttl doesn't work with ALIAS records
                   ttl: record['ttl'] || default_ttl,
-                  resource_records: [
-                    { value: record['value'] },
-                  ],
+                  resource_records: record['records'],
                 },
               ],
             },
