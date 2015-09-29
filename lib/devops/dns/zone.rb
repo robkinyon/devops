@@ -3,10 +3,11 @@ require 'devops/dns/record'
 class DevOps
   class DNS
     class Zone
-      attr_reader :client, :id
+      attr_reader :client, :id, :default_ttl
       def initialize(client, data)
         @client = client
         @id = data.id
+        @default_ttl = 600
       end
 
       def records
@@ -32,7 +33,46 @@ class DevOps
         return records[name].keys
       end
 
+      def ensure_record(record)
+        unless record.has_key?('type')
+          raise DevOps::Error, "ensure_record requires a 'type'"
+        end
+
+        #case record['type']
+        #when 'MX'
+        #  if !record['values']
+        #    raise DevOps::Error, 'MX requires values OR value and optional priority'
+        #  end
+        #end
+        create_record(record)
+      end
+
       private
+
+      def create_record(record)
+        begin
+          client.change_resource_record_sets(
+            hosted_zone_id: id,
+            change_batch: {
+              changes: [
+                {
+                  name: record['name'],
+                  type: record['type'],
+                  # ttl doesn't work with ALIAS records
+                  ttl: record['ttl'] || default_ttl,
+                  resource_records: [
+                    { value: record['value'] },
+                  ],
+                },
+              ],
+            },
+          )
+        rescue Aws::Route53::Errors::ServiceError => e
+          #puts e
+          raise DevOps::Error
+        end
+      end
+
       def load_records
         records = []
         begin
