@@ -67,6 +67,8 @@ class DevOps
               ],
             },
           )
+
+          # TODO: Ensure the record is INSYNC
         rescue Aws::Route53::Errors::ServiceError => e
           #puts e
           raise DevOps::Error

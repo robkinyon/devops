@@ -19,24 +19,28 @@ class DevOps
 
     def ensure_zone(name)
       unless zone_for(name)
-        begin
-          rv = client.create_hosted_zone(
-            name: name,
-            caller_reference: "Creating zone #{name}",
-          )
-        rescue Aws::Route53::Errors::ServiceError => e
-          #puts e
-          raise DevOps::Error
-        end
-
+        create_zone(name)
         refresh_zones
       end
       return zone_for(name)
     end
 
     private
+
     def canonical(name)
       name[-1] == '.' ? name : "#{name}."
+    end
+
+    def create_zone(name)
+      rv = client.create_hosted_zone(
+        name: name,
+        caller_reference: "Creating zone #{name}",
+      )
+
+      # TODO: Ensure the record is INSYNC
+    rescue Aws::Route53::Errors::ServiceError => e
+      #puts e
+      raise DevOps::Error
     end
 
     def load_zones
