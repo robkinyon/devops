@@ -29,7 +29,7 @@ describe DevOps::DNS::Zone do
           Aws::Route53::Types::ListResourceRecordSetsResponse.new(
             resource_record_sets: [
               Aws::Route53::Types::ResourceRecordSet.new(
-                name: 'foo.test',
+                name: 'foo.test.',
                 type: 'CNAME',
               ),
             ],
@@ -50,7 +50,7 @@ describe DevOps::DNS::Zone do
           Aws::Route53::Types::ListResourceRecordSetsResponse.new(
             resource_record_sets: [
               Aws::Route53::Types::ResourceRecordSet.new(
-                name: 'foo.test',
+                name: 'foo.test.',
                 type: 'CNAME',
               ),
             ],
@@ -61,7 +61,7 @@ describe DevOps::DNS::Zone do
           Aws::Route53::Types::ListResourceRecordSetsResponse.new(
             resource_record_sets: [
               Aws::Route53::Types::ResourceRecordSet.new(
-                name: 'foo.test',
+                name: 'foo.test.',
                 type: 'A',
               ),
             ],
@@ -150,7 +150,7 @@ describe DevOps::DNS::Zone do
             'type'   => 'MX',
             'name'   => 'foo.test',
             'records' => [
-              { 'value' => '5 mail.route.net' },
+              { value: '5 mail.route.net' },
             ],
           })
 
@@ -176,9 +176,9 @@ describe DevOps::DNS::Zone do
           with({
             'action' => 'CREATE',
             'type'   => 'MX',
-            'name'   => 'foo.test.',
+            'name'   => 'foo.test',
             'records' => [
-              { 'value' => '5 mail.route.net' },
+              { value: '5 mail.route.net' },
             ],
           })
 
@@ -231,7 +231,7 @@ describe DevOps::DNS::Zone do
             Aws::Route53::Types::ListResourceRecordSetsResponse.new(
               resource_record_sets: [
                 Aws::Route53::Types::ResourceRecordSet.new(
-                  name: 'www.foo.test',
+                  name: 'www.foo.test.',
                   type: 'A',
                 ),
               ],
@@ -330,6 +330,30 @@ describe DevOps::DNS::Zone do
         zone.ensure_record(
           'name'  => 'www.foo.test',
           'value' => 'www2.foo.test',
+        )
+      end
+
+      it 'defaults the name to the zone name' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
+        expect(zone).to receive(:issue_change_record).
+          with({
+            'action' => 'CREATE',
+            'name'   => 'www.foo.test',
+            'value'  => 'www2.foo.test',
+            'type'   => 'CNAME',
+          })
+
+        zone.ensure_record(
+          'name'  => 'www',
+          'value' => 'www2.foo.test',
+          'type'  => 'CNAME',
         )
       end
     end

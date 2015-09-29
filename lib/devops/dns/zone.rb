@@ -7,7 +7,7 @@ class DevOps
       def initialize(client, data, default_ttl=600)
         @client = client
         @id = data.id
-        @name = data.name
+        @name = data.name.gsub(/\.$/, '')
         @default_ttl = default_ttl
       end
 
@@ -66,11 +66,15 @@ class DevOps
               end
             end
 
-            { 'value' => item.values_at('priority', 'value').join(' ') }
+            { value: item.values_at('priority', 'value').join(' ') }
           }
         else
           unless record.has_key?('name')
             raise DevOps::Error, "ensure_record requires a 'name'"
+          end
+          # The AWS API requires fully-qualified names
+          unless record['name'].match(/#{name}$/)
+            record['name'] += '.' + name
           end
         end
 
@@ -98,11 +102,13 @@ class DevOps
               changes: [
                 {
                   action: record['action'],
-                  name: record['name'],
-                  type: record['type'],
-                  # ttl doesn't work with ALIAS records
-                  ttl: record['ttl'] || default_ttl,
-                  resource_records: record['records'],
+                  resource_record_set: {
+                    name: record['name'],
+                    type: record['type'],
+                    # ttl doesn't work with ALIAS records
+                    ttl: record['ttl'] || default_ttl,
+                    resource_records: record['records'],
+                  },
                 },
               ],
             },
@@ -137,8 +143,9 @@ class DevOps
 
         @records = {}
         records.each do |record|
-          @records[record.name] ||= {}
-          @records[record.name][record.type] = DevOps::DNS::Record.new(record)
+          name = record.name.gsub(/\.$/, '')
+          @records[name] ||= {}
+          @records[name][record.type] = DevOps::DNS::Record.new(record)
         end
       end
     end
