@@ -1,6 +1,8 @@
 require 'aws-sdk'
-require 'devops/dns'
+
 require 'devops/error'
+
+require 'devops/dns'
 
 class DevOps
 end

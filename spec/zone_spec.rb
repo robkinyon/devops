@@ -144,8 +144,17 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
         expect(zone).to receive(:issue_change_record).
           with({
+            'action' => 'CREATE',
             'type'   => 'MX',
             'name'   => 'foo.test',
             'records' => [
@@ -165,11 +174,49 @@ describe DevOps::DNS::Zone do
 
     describe 'type=A' do
       it 'creates a record with one value' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
         expect(zone).to receive(:issue_change_record).
           with({
-            'name'  => 'www.foo.test',
-            'value' => '1.2.3.4',
-            'type'  => 'A',
+            'action' => 'CREATE',
+            'name'   => 'www.foo.test',
+            'value'  => '1.2.3.4',
+            'type'   => 'A',
+          })
+
+        zone.ensure_record(
+          'name'  => 'www.foo.test',
+          'value' => '1.2.3.4',
+          'type'  => 'A',
+        )
+      end
+
+      it 'updates a record with one value' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [
+                Aws::Route53::Types::ResourceRecordSet.new(
+                  name: 'www.foo.test',
+                  type: 'A',
+                ),
+              ],
+              is_truncated: false,
+            )
+          )
+        expect(zone).to receive(:issue_change_record).
+          with({
+            'action' => 'UPSERT',
+            'name'   => 'www.foo.test',
+            'value'  => '1.2.3.4',
+            'type'   => 'A',
           })
 
         zone.ensure_record(
@@ -180,11 +227,20 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value, no type passed' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
         expect(zone).to receive(:issue_change_record).
           with({
-            'name'  => 'www.foo.test',
-            'value' => '1.2.3.4',
-            'type'  => 'A',
+            'action' => 'CREATE',
+            'name'   => 'www.foo.test',
+            'value'  => '1.2.3.4',
+            'type'   => 'A',
           })
 
         zone.ensure_record(
@@ -196,11 +252,20 @@ describe DevOps::DNS::Zone do
 
     describe 'type=CNAME' do
       it 'creates a record with one value' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
         expect(zone).to receive(:issue_change_record).
           with({
-            'name'  => 'www.foo.test',
-            'value' => 'www2.foo.test',
-            'type'  => 'CNAME',
+            'action' => 'CREATE',
+            'name'   => 'www.foo.test',
+            'value'  => 'www2.foo.test',
+            'type'   => 'CNAME',
           })
 
         zone.ensure_record(
@@ -211,11 +276,20 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value, no type passed' do
+        expect(client).to receive(:list_resource_record_sets).
+          with(hosted_zone_id: 'id').
+          and_return(
+            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+              resource_record_sets: [],
+              is_truncated: false,
+            )
+          )
         expect(zone).to receive(:issue_change_record).
           with({
-            'name'  => 'www.foo.test',
-            'value' => 'www2.foo.test',
-            'type'  => 'CNAME',
+            'action' => 'CREATE',
+            'name'   => 'www.foo.test',
+            'value'  => 'www2.foo.test',
+            'type'   => 'CNAME',
           })
 
         zone.ensure_record(
@@ -226,6 +300,14 @@ describe DevOps::DNS::Zone do
     end
 
     it 'handles errors thrown' do
+      expect(client).to receive(:list_resource_record_sets).
+        with(hosted_zone_id: 'id').
+        and_return(
+          Aws::Route53::Types::ListResourceRecordSetsResponse.new(
+            resource_record_sets: [],
+            is_truncated: false,
+          )
+        )
       expect(client).to receive(:change_resource_record_sets).
         and_raise(Aws::Route53::Errors::ServiceError.new(:context, 'message'))
 

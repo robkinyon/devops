@@ -68,11 +68,11 @@ class DevOps
         end
 
         # This doesn't handle weighted sets (yet)
-        #if record_for(record['name'], record['type'])
-        #  record['action'] = 'UPSERT'
-        #else
-        #  record['action'] = 'CREATE'
-        #end
+        if record_for(record['name'], record['type'])
+          record['action'] = 'UPSERT'
+        else
+          record['action'] = 'CREATE'
+        end
 
         issue_change_record(record)
       end
