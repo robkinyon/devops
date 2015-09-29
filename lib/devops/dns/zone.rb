@@ -180,8 +180,9 @@ class DevOps
         @records = {}
         records.each do |record|
           name = record.name.gsub(/\.$/, '')
+          type = record.alias_target ? 'ALIAS' : record.type
           @records[name] ||= {}
-          @records[name][record.type] = DevOps::DNS::Record.new(record)
+          @records[name][type] = DevOps::DNS::Record.new(record)
         end
       end
     end
