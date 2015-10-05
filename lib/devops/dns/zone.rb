@@ -181,8 +181,13 @@ class DevOps
         records.each do |record|
           name = record.name.gsub(/\.$/, '')
           type = record.alias_target ? 'ALIAS' : record.type
+
           @records[name] ||= {}
-          @records[name][type] = DevOps::DNS::Record.new(record)
+          if @records[name][type]
+            @records[name][type].add_record(record)
+          else
+            @records[name][type] = DevOps::DNS::Record.new(record)
+          end
         end
       end
     end

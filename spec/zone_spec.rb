@@ -1,41 +1,56 @@
 describe DevOps::DNS::Zone do
+  let(:zone_id) { 'id' }
   let(:client) { instance_double('Aws::Route53::Client') }
   let(:zone) {
     DevOps::DNS::Zone.new(
       client,
-      Aws::Route53::Types::HostedZone.new(id: 'id', name: 'foo.test.'),
+      Aws::Route53::Types::HostedZone.new(id: zone_id, name: 'foo.test.'),
     )
   }
 
+  def setup_zone(*rv)
+    expect(client).to receive(:list_resource_record_sets).
+      with(hosted_zone_id: zone_id).
+      and_return(*rv)
+  end
+
+  def setup_paginated_zone(with_returns)
+    with_returns.each do |with, returns|
+      expect(client).to receive(:list_resource_record_sets).ordered.
+        with(with.merge(hosted_zone_id: zone_id)).
+        and_return(*returns)
+    end
+  end
+
+  def records(records=[], overrides={})
+    opts = {
+      resource_record_sets: records,
+      is_truncated: false,
+    }.merge(overrides)
+
+    Aws::Route53::Types::ListResourceRecordSetsResponse.new(opts)
+  end
+
+  def record(opts={})
+    Aws::Route53::Types::ResourceRecordSet.new(opts)
+  end
+
+  def setup_empty_zone
+    setup_zone( records() )
+  end
+
   describe '#records' do
     it "can load zero records" do
-      expect(client).to receive(:list_resource_record_sets).
-        with(hosted_zone_id: 'id').
-        and_return(
-          Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-            resource_record_sets: [],
-            is_truncated: false,
-          )
-        )
+      setup_empty_zone()
       expect(zone.records).to eq({})
       expect(zone.record_for('foo.test')).to eq(nil)
       expect(zone.record_for('foo.test', 'CNAME')).to eq(nil)
     end
 
     it "can load one record" do
-      expect(client).to receive(:list_resource_record_sets).
-        with(hosted_zone_id: 'id').
-        and_return(
-          Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-            resource_record_sets: [
-              Aws::Route53::Types::ResourceRecordSet.new(
-                name: 'foo.test.',
-                type: 'CNAME',
-              ),
-            ],
-            is_truncated: false,
-          )
-        )
+      setup_zone(
+        records([ record( name: 'foo.test.', type: 'CNAME') ])
+      )
       expect(zone.records.keys).to match_array(['foo.test'])
       expect(zone.record_for('foo.test')).to be_an(DevOps::DNS::Record)
       expect(zone.record_for('foo.test', 'CNAME')).to be_an(DevOps::DNS::Record)
@@ -44,30 +59,22 @@ describe DevOps::DNS::Zone do
     end
 
     it "can load two records for the same name (with pagination)" do
-      expect(client).to receive(:list_resource_record_sets).
-        #with(hosted_zone_id: 'id').
-        and_return(
-          Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-            resource_record_sets: [
-              Aws::Route53::Types::ResourceRecordSet.new(
-                name: 'foo.test.',
-                type: 'CNAME',
-              ),
-            ],
+      setup_paginated_zone(
+        {} => [
+          records(
+            [ record(name: 'foo.test.', type: 'CNAME') ],
             is_truncated: true,
             next_record_name: 'record',
             next_record_type: 'record',
           ),
-          Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-            resource_record_sets: [
-              Aws::Route53::Types::ResourceRecordSet.new(
-                name: 'foo.test.',
-                type: 'A',
-              ),
-            ],
-            is_truncated: false,
-          )
-        )
+        ],
+        { start_record_name: 'record', start_record_type: 'record' } => [
+          records(
+            [ record(name: 'foo.test.', type: 'A') ],
+          ),
+        ]
+      )
+
       expect(zone.records.keys).to match_array(['foo.test'])
 
       # We have too many records to return just one
@@ -136,14 +143,7 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -164,14 +164,7 @@ describe DevOps::DNS::Zone do
       end
 
       it 'defaults the name to the zone name' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -201,14 +194,8 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
+
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -225,19 +212,12 @@ describe DevOps::DNS::Zone do
       end
 
       it 'updates a record with one value' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [
-                Aws::Route53::Types::ResourceRecordSet.new(
-                  name: 'www.foo.test.',
-                  type: 'A',
-                ),
-              ],
-              is_truncated: false,
-            )
+        setup_zone(
+          records(
+            [ record(name: 'www.foo.test.', type: 'A') ],
           )
+        )
+
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'UPSERT',
@@ -254,14 +234,8 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value, no type passed' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
+
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -287,14 +261,8 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
+
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -311,14 +279,8 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value, no type passed' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
+
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -334,14 +296,8 @@ describe DevOps::DNS::Zone do
       end
 
       it 'defaults the name suffix to the zone name' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
+
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -358,14 +314,8 @@ describe DevOps::DNS::Zone do
       end
 
       it 'treats @ as the zone name' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [],
-              is_truncated: false,
-            )
-          )
+        setup_empty_zone()
+
         expect(zone).to receive(:issue_change_record).
           with({
             'action' => 'CREATE',
@@ -392,19 +342,11 @@ describe DevOps::DNS::Zone do
       end
 
       it 'creates a record with one value' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [
-                Aws::Route53::Types::ResourceRecordSet.new(
-                  name: 'www.foo.test.',
-                  type: 'A',
-                ),
-              ],
-              is_truncated: false,
-            )
+        setup_zone(
+          records(
+            [ record(name: 'www.foo.test.', type: 'A') ],
           )
+        )
 
         # Get the target so .with() passes properly
         target = zone.record_for('www')
@@ -425,19 +367,11 @@ describe DevOps::DNS::Zone do
       end
 
       it 'calls the client with the right values' do
-        expect(client).to receive(:list_resource_record_sets).
-          with(hosted_zone_id: 'id').
-          and_return(
-            Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-              resource_record_sets: [
-                Aws::Route53::Types::ResourceRecordSet.new(
-                  name: 'www.foo.test.',
-                  type: 'A',
-                ),
-              ],
-              is_truncated: false,
-            )
+        setup_zone(
+          records(
+            [ record(name: 'www.foo.test.', type: 'A') ]
           )
+        )
 
         expect(client).to receive(:change_resource_record_sets).
           with(
@@ -467,15 +401,39 @@ describe DevOps::DNS::Zone do
       end
     end
 
-    it 'handles errors thrown' do
-      expect(client).to receive(:list_resource_record_sets).
-        with(hosted_zone_id: 'id').
-        and_return(
-          Aws::Route53::Types::ListResourceRecordSetsResponse.new(
-            resource_record_sets: [],
-            is_truncated: false,
-          )
+    xdescribe 'weighted records' do
+      it 'creates a 2-record weighted set' do
+        setup_empty_zone()
+
+        # set_identifier
+        expect(zone).to receive(:issue_change_record).
+          with({
+            'action' => 'CREATE',
+            'name'   => 'www.foo.test',
+            'value'  => 'www1.bar.test',
+            'type'   => 'CNAME',
+            'weight' => 3,
+          }, {
+            'action' => 'CREATE',
+            'name'   => 'www.foo.test',
+            'value'  => 'www2.bar.test',
+            'type'   => 'CNAME',
+            'weight' => 1,
+          })
+
+        zone.ensure_record(
+          'name'  => 'www',
+          'values' => [
+            { 'value' => 'www1.bar.test', 'weight' => 3 },
+            { 'value' => 'www2.bar.test', 'weight' => 1 },
+          ],
         )
+      end
+    end
+
+    it 'handles errors thrown' do
+      setup_empty_zone()
+
       expect(client).to receive(:change_resource_record_sets).
         and_raise(Aws::Route53::Errors::ServiceError.new(:context, 'message'))
 
