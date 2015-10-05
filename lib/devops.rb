@@ -9,7 +9,6 @@ class DevOps
   def initialize(region='us-east-1')
     Aws.config.update({
       region: region,
-      credentials: Aws::SharedCredentials.new,
     })
   end
 
