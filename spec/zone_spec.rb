@@ -39,6 +39,53 @@ describe DevOps::DNS::Zone do
     setup_zone( records() )
   end
 
+  def expect_change_record(opts)
+    records = opts.has_key?(:values) ?
+      opts[:values].map{|e| { value: e }} :
+      [{ value: opts[:value] }]
+
+    expect(client).to receive(:change_resource_record_sets).
+      with(
+        hosted_zone_id: zone_id,
+        change_batch: {
+          changes: [
+            {
+              action: opts[:action] || 'CREATE',
+              resource_record_set: {
+                name: opts[:name],
+                type: opts[:type],
+                ttl: record[:ttl] || 600,
+                resource_records: records,
+              },
+            },
+          ],
+        },
+      )
+  end
+
+  def expect_alias_record(opts)
+    expect(client).to receive(:change_resource_record_sets).
+      with(
+        hosted_zone_id: zone_id,
+        change_batch: {
+          changes: [
+            {
+              action: opts[:action] || 'CREATE',
+              resource_record_set: {
+                name: opts[:name],
+                type: opts[:type],
+                alias_target: {
+                  hosted_zone_id: zone_id,
+                  dns_name: opts[:value],
+                  evaluate_target_health: false,
+                },
+              },
+            },
+          ],
+        },
+      )
+  end
+
   describe '#records' do
     it "can load zero records" do
       setup_empty_zone()
@@ -144,15 +191,11 @@ describe DevOps::DNS::Zone do
 
       it 'creates a record with one value' do
         setup_empty_zone()
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'type'   => 'MX',
-            'name'   => 'foo.test',
-            'records' => [
-              { value: '5 mail.route.net' },
-            ],
-          })
+        expect_change_record(
+          type: 'MX',
+          name: 'foo.test',
+          value: '5 mail.route.net',
+        )
 
         zone.ensure_record(
           'type'   => 'MX',
@@ -163,17 +206,31 @@ describe DevOps::DNS::Zone do
         )
       end
 
+      it 'creates a record with two value' do
+        setup_empty_zone()
+        expect_change_record(
+          type: 'MX',
+          name: 'foo.test',
+          values: [ '5 mail.route.net', '15 mail2.route.net' ],
+        )
+
+        zone.ensure_record(
+          'type'   => 'MX',
+          'name'   => 'foo.test',
+          'values' => [
+            { 'priority' => 5, 'value' => 'mail.route.net' },
+            { 'priority' => 15, 'value' => 'mail2.route.net' },
+          ],
+        )
+      end
+
       it 'defaults the name to the zone name' do
         setup_empty_zone()
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'type'   => 'MX',
-            'name'   => 'foo.test',
-            'records' => [
-              { value: '5 mail.route.net' },
-            ],
-          })
+        expect_change_record(
+          type: 'MX',
+          name: 'foo.test',
+          value: '5 mail.route.net',
+        )
 
         zone.ensure_record(
           'type'   => 'MX',
@@ -195,14 +252,11 @@ describe DevOps::DNS::Zone do
 
       it 'creates a record with one value' do
         setup_empty_zone()
-
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'www.foo.test',
-            'value'  => '1.2.3.4',
-            'type'   => 'A',
-          })
+        expect_change_record(
+          name: 'www.foo.test',
+          value: '1.2.3.4',
+          type: 'A',
+        )
 
         zone.ensure_record(
           'name'  => 'www.foo.test',
@@ -217,14 +271,12 @@ describe DevOps::DNS::Zone do
             [ record(name: 'www.foo.test.', type: 'A') ],
           )
         )
-
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'UPSERT',
-            'name'   => 'www.foo.test',
-            'value'  => '1.2.3.4',
-            'type'   => 'A',
-          })
+        expect_change_record(
+          action: 'UPSERT',
+          name: 'www.foo.test',
+          value: '1.2.3.4',
+          type: 'A',
+        )
 
         zone.ensure_record(
           'name'  => 'www.foo.test',
@@ -235,14 +287,11 @@ describe DevOps::DNS::Zone do
 
       it 'creates a record with one value, no type passed' do
         setup_empty_zone()
-
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'www.foo.test',
-            'value'  => '1.2.3.4',
-            'type'   => 'A',
-          })
+        expect_change_record(
+          name: 'www.foo.test',
+          value: '1.2.3.4',
+          type: 'A',
+        )
 
         zone.ensure_record(
           'name'  => 'www.foo.test',
@@ -263,13 +312,11 @@ describe DevOps::DNS::Zone do
       it 'creates a record with one value' do
         setup_empty_zone()
 
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'www.foo.test',
-            'value'  => 'www2.foo.test',
-            'type'   => 'CNAME',
-          })
+        expect_change_record(
+          name: 'www.foo.test',
+          value: 'www2.foo.test',
+          type: 'CNAME',
+        )
 
         zone.ensure_record(
           'name'  => 'www.foo.test',
@@ -281,13 +328,11 @@ describe DevOps::DNS::Zone do
       it 'creates a record with one value, no type passed' do
         setup_empty_zone()
 
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'www.foo.test',
-            'value'  => 'www2.foo.test',
-            'type'   => 'CNAME',
-          })
+        expect_change_record(
+          name: 'www.foo.test',
+          value: 'www2.foo.test',
+          type: 'CNAME',
+        )
 
         zone.ensure_record(
           'name'  => 'www.foo.test',
@@ -298,13 +343,11 @@ describe DevOps::DNS::Zone do
       it 'defaults the name suffix to the zone name' do
         setup_empty_zone()
 
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'www.foo.test',
-            'value'  => 'www2.foo.test',
-            'type'   => 'CNAME',
-          })
+        expect_change_record(
+          name: 'www.foo.test',
+          value: 'www2.foo.test',
+          type: 'CNAME',
+        )
 
         zone.ensure_record(
           'name'  => 'www',
@@ -316,18 +359,15 @@ describe DevOps::DNS::Zone do
       it 'treats @ as the zone name' do
         setup_empty_zone()
 
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'foo.test',
-            'value'  => 'www2.foo.test',
-            'type'   => 'CNAME',
-          })
+        expect_change_record(
+          name: 'foo.test',
+          value: 'www2.foo.test',
+          type: 'CNAME',
+        )
 
         zone.ensure_record(
           'name'  => '@',
           'value' => 'www2.foo.test',
-          'type'  => 'CNAME',
         )
       end
     end
@@ -347,52 +387,11 @@ describe DevOps::DNS::Zone do
             [ record(name: 'www.foo.test.', type: 'A') ],
           )
         )
-
-        # Get the target so .with() passes properly
-        target = zone.record_for('www')
-
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'www2.foo.test',
-            'value'  => 'www',
-            'target' => target,
-            'type'   => 'ALIAS',
-          })
-
-        zone.ensure_record(
-          'name'  => 'www2',
-          'value' => 'www',
+        expect_alias_record(
+          name: 'www2.foo.test',
+          value: 'www.foo.test.',
+          type: 'A',
         )
-      end
-
-      it 'calls the client with the right values' do
-        setup_zone(
-          records(
-            [ record(name: 'www.foo.test.', type: 'A') ]
-          )
-        )
-
-        expect(client).to receive(:change_resource_record_sets).
-          with(
-            hosted_zone_id: zone.id,
-            change_batch: {
-              changes: [
-                {
-                  action: 'CREATE',
-                  resource_record_set: {
-                    name: 'www2.foo.test',
-                    type: 'A',
-                    alias_target: {
-                      hosted_zone_id: zone.id,
-                      dns_name: 'www.foo.test.',
-                      evaluate_target_health: false,
-                    },
-                  },
-                },
-              ],
-            },
-          )
 
         zone.ensure_record(
           'name'  => 'www2',
