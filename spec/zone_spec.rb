@@ -8,84 +8,6 @@ describe DevOps::DNS::Zone do
     )
   }
 
-  def setup_zone(*rv)
-    expect(client).to receive(:list_resource_record_sets).
-      with(hosted_zone_id: zone_id).
-      and_return(*rv)
-  end
-
-  def setup_paginated_zone(with_returns)
-    with_returns.each do |with, returns|
-      expect(client).to receive(:list_resource_record_sets).ordered.
-        with(with.merge(hosted_zone_id: zone_id)).
-        and_return(*returns)
-    end
-  end
-
-  def records(records=[], overrides={})
-    opts = {
-      resource_record_sets: records,
-      is_truncated: false,
-    }.merge(overrides)
-
-    Aws::Route53::Types::ListResourceRecordSetsResponse.new(opts)
-  end
-
-  def record(opts={})
-    Aws::Route53::Types::ResourceRecordSet.new(opts)
-  end
-
-  def setup_empty_zone
-    setup_zone( records() )
-  end
-
-  def expect_change_record(opts)
-    records = opts.has_key?(:values) ?
-      opts[:values].map{|e| { value: e }} :
-      [{ value: opts[:value] }]
-
-    expect(client).to receive(:change_resource_record_sets).
-      with(
-        hosted_zone_id: zone_id,
-        change_batch: {
-          changes: [
-            {
-              action: opts[:action] || 'CREATE',
-              resource_record_set: {
-                name: opts[:name],
-                type: opts[:type],
-                ttl: record[:ttl] || 600,
-                resource_records: records,
-              },
-            },
-          ],
-        },
-      )
-  end
-
-  def expect_alias_record(opts)
-    expect(client).to receive(:change_resource_record_sets).
-      with(
-        hosted_zone_id: zone_id,
-        change_batch: {
-          changes: [
-            {
-              action: opts[:action] || 'CREATE',
-              resource_record_set: {
-                name: opts[:name],
-                type: opts[:type],
-                alias_target: {
-                  hosted_zone_id: zone_id,
-                  dns_name: opts[:value],
-                  evaluate_target_health: false,
-                },
-              },
-            },
-          ],
-        },
-      )
-  end
-
   describe '#records' do
     it "can load zero records" do
       setup_empty_zone()
@@ -140,8 +62,17 @@ describe DevOps::DNS::Zone do
     end
   end
 
-  # These tests are going to verify that ensure_record properly transforms what
-  # it receives into calls to issue_change_record.
+  # Rules:
+  # * mail: true or name: /\w+/
+  #   - name can be '@'
+  #   - could be both for mail subdomain
+  # * value: 'x' --> values: ['x']
+  # * MX records given arbitrary priorities (5.., step by 5)
+  # * type is inferred
+  # * values can be:
+  #   - string
+  #   - { value: 'x' }
+  #   - { value: 'x', weight: /\d+/, type: [EC2, RDS, ELB, S3, CF] }
   describe '#ensure_record' do
     describe 'rejects' do
       it 'a record without a type' do

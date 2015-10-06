@@ -1,5 +1,8 @@
 require File.expand_path('on_what', File.dirname(File.dirname(__FILE__)))
 
+require 'helpers/zone'
+require 'helpers/zonelist'
+
 RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
@@ -9,6 +12,9 @@ RSpec.configure do |config|
     # Protect against speling errors in mocks.
     mocks.verify_doubled_constant_names = true
   end
+
+  config.include Zone
+  config.include ZoneList
 end
 
 unless on_1_8?
