@@ -11,9 +11,9 @@ class DevOps
       end
 
       def add_record(record)
-        unless record.name == name && record.type == type
-          raise DevOps::Error
-        end
+        #unless record.name == name && record.type == type
+        #  raise DevOps::Error
+        #end
         @records.push record
       end
     end

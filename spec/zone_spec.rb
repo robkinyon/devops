@@ -63,7 +63,7 @@ describe DevOps::DNS::Zone do
   end
 
   # Rules:
-  # * mail: true or name: /\w+/
+  # * mail: true or name: /\w+/ (Must be at least one)
   #   - name can be '@'
   #   - could be both for mail subdomain
   # * value: 'x' --> values: ['x']
@@ -75,113 +75,42 @@ describe DevOps::DNS::Zone do
   #   - { value: 'x', weight: /\d+/, type: [EC2, RDS, ELB, S3, CF] }
   describe '#ensure_record' do
     describe 'rejects' do
-      it 'a record without a type' do
+      it 'a record without a name or mail:true' do
         expect {
           zone.ensure_record({})
         }.to raise_error(
-          DevOps::Error, "ensure_record requires a 'type'"
+          DevOps::Error, "ensure_record requires a :name or mail:true"
+        )
+      end
+
+      it 'a record without a value or values' do
+        expect {
+          zone.ensure_record(
+            name: 'www.foo.test',
+          )
+        }.to raise_error(
+          DevOps::Error, "ensure_record requires a :value or :values"
         )
       end
     end
 
-    describe 'type=MX' do
-      it 'rejects a record without values' do
-        expect {
-          zone.ensure_record(
-            'type' => 'MX',
-            'name' => 'foo.test',
-          )
-        }.to raise_error(
-          DevOps::Error, 'MX requires values to be set'
-        )
-      end
+    it 'handles errors thrown' do
+      setup_empty_zone()
 
-      it 'rejects a record without priority' do
-        expect {
-          zone.ensure_record(
-            'type' => 'MX',
-            'name' => 'foo.test',
-            'values' => [ {} ],
-          )
-        }.to raise_error(
-          DevOps::Error, 'Missing priority in MX record'
-        )
-      end
+      expect(client).to receive(:change_resource_record_sets).
+        and_raise(Aws::Route53::Errors::ServiceError.new(:context, 'message'))
 
-      it 'rejects a record without value' do
-        expect {
-          zone.ensure_record(
-            'type' => 'MX',
-            'name' => 'foo.test',
-            'values' => [ { 'priority' => 5 } ],
-          )
-        }.to raise_error(
-          DevOps::Error, 'Missing value in MX record'
-        )
-      end
-
-      it 'creates a record with one value' do
-        setup_empty_zone()
-        expect_change_record(
-          type: 'MX',
-          name: 'foo.test',
-          value: '5 mail.route.net',
-        )
-
-        zone.ensure_record(
-          'type'   => 'MX',
-          'name'   => 'foo.test',
-          'values' => [
-            { 'priority' => 5, 'value' => 'mail.route.net' },
-          ],
-        )
-      end
-
-      it 'creates a record with two value' do
-        setup_empty_zone()
-        expect_change_record(
-          type: 'MX',
-          name: 'foo.test',
-          values: [ '5 mail.route.net', '15 mail2.route.net' ],
-        )
-
-        zone.ensure_record(
-          'type'   => 'MX',
-          'name'   => 'foo.test',
-          'values' => [
-            { 'priority' => 5, 'value' => 'mail.route.net' },
-            { 'priority' => 15, 'value' => 'mail2.route.net' },
-          ],
-        )
-      end
-
-      it 'defaults the name to the zone name' do
-        setup_empty_zone()
-        expect_change_record(
-          type: 'MX',
-          name: 'foo.test',
-          value: '5 mail.route.net',
-        )
-
-        zone.ensure_record(
-          'type'   => 'MX',
-          'values' => [
-            { 'priority' => 5, 'value' => 'mail.route.net' },
-          ],
-        )
-      end
+      expect{
+        zone.ensure_record({
+          name: 'www.foo.test',
+          type: 'A',
+          value: '1.2.3.4',
+        })
+      }.to raise_error(DevOps::Error)
     end
 
-    describe 'type=A' do
-      it 'rejects a record without a name' do
-        expect {
-          zone.ensure_record({'type' => 'A'})
-        }.to raise_error(
-          DevOps::Error, "ensure_record requires a 'name'"
-        )
-      end
-
-      it 'creates a record with one value' do
+    describe 'loads name records' do
+      it 'creates a A record' do
         setup_empty_zone()
         expect_change_record(
           name: 'www.foo.test',
@@ -190,9 +119,41 @@ describe DevOps::DNS::Zone do
         )
 
         zone.ensure_record(
-          'name'  => 'www.foo.test',
-          'value' => '1.2.3.4',
-          'type'  => 'A',
+          name: 'www.foo.test',
+          value: '1.2.3.4',
+        )
+      end
+
+      it 'creates a CNAME value' do
+        setup_empty_zone()
+
+        expect_change_record(
+          name: 'www.foo.test',
+          value: 'www2.foo.test',
+          type: 'CNAME',
+        )
+
+        zone.ensure_record(
+          name: 'www.foo.test',
+          value: 'www2.foo.test',
+        )
+      end
+
+      it 'creates a ALIAS value' do
+        setup_zone(
+          records(
+            [ record(name: 'www.foo.test.', type: 'A') ],
+          )
+        )
+        expect_alias_record(
+          name: 'www2.foo.test',
+          value: 'www.foo.test.',
+          type: 'A',
+        )
+
+        zone.ensure_record(
+          name: 'www2',
+          value: 'www',
         )
       end
 
@@ -210,80 +171,8 @@ describe DevOps::DNS::Zone do
         )
 
         zone.ensure_record(
-          'name'  => 'www.foo.test',
-          'value' => '1.2.3.4',
-          'type'  => 'A',
-        )
-      end
-
-      it 'creates a record with one value, no type passed' do
-        setup_empty_zone()
-        expect_change_record(
           name: 'www.foo.test',
           value: '1.2.3.4',
-          type: 'A',
-        )
-
-        zone.ensure_record(
-          'name'  => 'www.foo.test',
-          'value' => '1.2.3.4',
-        )
-      end
-    end
-
-    describe 'type=CNAME' do
-      it 'rejects a record without a name' do
-        expect {
-          zone.ensure_record({'type' => 'CNAME'})
-        }.to raise_error(
-          DevOps::Error, "ensure_record requires a 'name'"
-        )
-      end
-
-      it 'creates a record with one value' do
-        setup_empty_zone()
-
-        expect_change_record(
-          name: 'www.foo.test',
-          value: 'www2.foo.test',
-          type: 'CNAME',
-        )
-
-        zone.ensure_record(
-          'name'  => 'www.foo.test',
-          'value' => 'www2.foo.test',
-          'type'  => 'CNAME',
-        )
-      end
-
-      it 'creates a record with one value, no type passed' do
-        setup_empty_zone()
-
-        expect_change_record(
-          name: 'www.foo.test',
-          value: 'www2.foo.test',
-          type: 'CNAME',
-        )
-
-        zone.ensure_record(
-          'name'  => 'www.foo.test',
-          'value' => 'www2.foo.test',
-        )
-      end
-
-      it 'defaults the name suffix to the zone name' do
-        setup_empty_zone()
-
-        expect_change_record(
-          name: 'www.foo.test',
-          value: 'www2.foo.test',
-          type: 'CNAME',
-        )
-
-        zone.ensure_record(
-          'name'  => 'www',
-          'value' => 'www2.foo.test',
-          'type'  => 'CNAME',
         )
       end
 
@@ -297,36 +186,61 @@ describe DevOps::DNS::Zone do
         )
 
         zone.ensure_record(
-          'name'  => '@',
-          'value' => 'www2.foo.test',
+          name: '@',
+          value: 'www2.foo.test',
+        )
+      end
+
+      # This test is for if we provide values from JSON
+      it 'handles a record with strings instead of symbols' do
+        setup_empty_zone()
+
+        expect_change_record(
+          name: 'www.foo.test',
+          value: 'www2.foo.test',
+          type: 'CNAME',
+        )
+
+        zone.ensure_record(
+          'name' => 'www.foo.test',
+          'values' => [
+            {'value' => 'www2.foo.test' },
+          ],
         )
       end
     end
 
-    describe 'type=ALIAS' do
-      it 'rejects a record without a name' do
-        expect {
-          zone.ensure_record({'type' => 'ALIAS'})
-        }.to raise_error(
-          DevOps::Error, "ensure_record requires a 'name'"
-        )
-      end
-
+    describe 'loads mail records' do
       it 'creates a record with one value' do
-        setup_zone(
-          records(
-            [ record(name: 'www.foo.test.', type: 'A') ],
-          )
-        )
-        expect_alias_record(
-          name: 'www2.foo.test',
-          value: 'www.foo.test.',
-          type: 'A',
+        setup_empty_zone()
+        expect_change_record(
+          type: 'MX',
+          name: 'foo.test',
+          value: '5 mail.route.net',
         )
 
         zone.ensure_record(
-          'name'  => 'www2',
-          'value' => 'www',
+          mail: true,
+          values: [
+            { value: 'mail.route.net' },
+          ],
+        )
+      end
+
+      it 'creates a record with two values' do
+        setup_empty_zone()
+        expect_change_record(
+          type: 'MX',
+          name: 'foo.test',
+          values: [ '5 mail.route.net', '10 mail2.route.net' ],
+        )
+
+        zone.ensure_record(
+          mail: true,
+          values: [
+            { value: 'mail.route.net' },
+            { value: 'mail2.route.net' },
+          ],
         )
       end
     end
@@ -352,28 +266,13 @@ describe DevOps::DNS::Zone do
           })
 
         zone.ensure_record(
-          'name'  => 'www',
-          'values' => [
-            { 'value' => 'www1.bar.test', 'weight' => 3 },
-            { 'value' => 'www2.bar.test', 'weight' => 1 },
+          name: 'www',
+          values: [
+            { value: 'www1.bar.test', weight: 3 },
+            { value: 'www2.bar.test', weight: 1 },
           ],
         )
       end
-    end
-
-    it 'handles errors thrown' do
-      setup_empty_zone()
-
-      expect(client).to receive(:change_resource_record_sets).
-        and_raise(Aws::Route53::Errors::ServiceError.new(:context, 'message'))
-
-      expect{
-        zone.ensure_record({
-          'name' => 'www.foo.test',
-          'type' => 'A',
-          'value' => '1.2.3.4',
-        })
-      }.to raise_error(DevOps::Error)
     end
   end
 end
