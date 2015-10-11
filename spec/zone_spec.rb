@@ -245,25 +245,42 @@ describe DevOps::DNS::Zone do
       end
     end
 
-    xdescribe 'weighted records' do
+    describe 'weighted records' do
       it 'creates a 2-record weighted set' do
         setup_empty_zone()
 
-        # set_identifier
-        expect(zone).to receive(:issue_change_record).
-          with({
-            'action' => 'CREATE',
-            'name'   => 'www.foo.test',
-            'value'  => 'www1.bar.test',
-            'type'   => 'CNAME',
-            'weight' => 3,
-          }, {
-            'action' => 'CREATE',
-            'name'   => 'www.foo.test',
-            'value'  => 'www2.bar.test',
-            'type'   => 'CNAME',
-            'weight' => 1,
-          })
+        expect_change_record(
+          #name: 'www.foo.test',
+          #type: 'CNAME',
+          changes: [
+            {
+              action: 'CREATE',
+              resource_record_set: {
+                set_identifier: 'www.foo.test-www1.bar.test',
+                name: 'www.foo.test',
+                type: 'CNAME',
+                ttl: 600,
+                weight: 3,
+                resource_records: [
+                  { value: 'www1.bar.test' },
+                ],
+              },
+            },
+            {
+              action: 'CREATE',
+              resource_record_set: {
+                set_identifier: 'www.foo.test-www2.bar.test',
+                name: 'www.foo.test',
+                type: 'CNAME',
+                ttl: 600,
+                weight: 1,
+                resource_records: [
+                  { value: 'www2.bar.test' },
+                ],
+              },
+            },
+          ],
+        )
 
         zone.ensure_record(
           name: 'www',

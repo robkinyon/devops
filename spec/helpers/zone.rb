@@ -31,26 +31,30 @@ module Zone
   end
 
   def expect_change_record(opts)
-    records = opts.has_key?(:values) ?
-      opts[:values].map{|e| { value: e }} :
-      [{ value: opts[:value] }]
+    if opts[:changes]
+      changes = opts[:changes]
+    else
+      records = opts.has_key?(:values) ?
+        opts[:values].map{|e| { value: e }} :
+        [{ value: opts[:value] }]
+
+      changes = [
+        {
+          action: opts[:action] || 'CREATE',
+          resource_record_set: {
+            name: opts[:name],
+            type: opts[:type],
+            ttl: record[:ttl] || 600,
+            resource_records: records,
+          },
+        },
+      ]
+    end
 
     expect(client).to receive(:change_resource_record_sets).
       with(
         hosted_zone_id: zone_id,
-        change_batch: {
-          changes: [
-            {
-              action: opts[:action] || 'CREATE',
-              resource_record_set: {
-                name: opts[:name],
-                type: opts[:type],
-                ttl: record[:ttl] || 600,
-                resource_records: records,
-              },
-            },
-          ],
-        },
+        change_batch: { changes: changes },
       )
   end
 

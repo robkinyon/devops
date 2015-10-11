@@ -67,6 +67,9 @@ class DevOps
         end
 
         # TODO: Verify all the [:values][][:values] are the same type
+        # TODO: Verify all of or none of the values have weights
+        #   * All weights must be /^\d+$/
+        #   * If no weights, then only one value
         record[:values].each do |item|
           target = record_for(item[:value], 'A') ||
                    record_for(item[:value], 'CNAME')
@@ -76,6 +79,7 @@ class DevOps
           else
             case item[:value]
             # A numeric IP address is a 'A' record
+            # TODO: Verify the IP record is legal (1-255)
             when /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/
               record[:type] = 'A'
             else
@@ -95,6 +99,7 @@ class DevOps
         end
 
         # The AWS API requires fully-qualified names
+        record[:original_name] = record[:name]
         if record[:name] == '@'
           record[:name] = zone_name
         elsif !record[:name].match(/#{zone_name}$/)
@@ -115,45 +120,63 @@ class DevOps
       def issue_change_record(record)
         begin
           if record[:type] == 'ALIAS'
-            client.change_resource_record_sets(
-              hosted_zone_id: id,
-              change_batch: {
-                changes: [
-                  {
-                    action: record[:action],
-                    resource_record_set: {
-                      name: record[:name],
-                      type: record[:target].type,
-                      alias_target: {
-                        # Currently, only intra-zone ALIASes are supported.
-                        hosted_zone_id: id,
-                        dns_name: record[:target].name,
-                        evaluate_target_health: false,
-                      },
-                    },
+            changes = [
+              {
+                action: record[:action],
+                resource_record_set: {
+                  name: record[:name],
+                  type: record[:target].type,
+                  alias_target: {
+                    # Currently, only intra-zone ALIASes are supported.
+                    hosted_zone_id: id,
+                    dns_name: record[:target].name,
+                    evaluate_target_health: false,
                   },
-                ],
+                },
               },
-            )
+            ]
           else
-            client.change_resource_record_sets(
-              hosted_zone_id: id,
-              change_batch: {
-                changes: [
-                  {
-                    action: record[:action],
-                    resource_record_set: {
-                      name: record[:name],
-                      type: record[:type],
-                      # ttl doesn't work with ALIAS records
-                      ttl: record[:ttl] || default_ttl,
-                      resource_records: record[:values],
-                    },
+            # Mail records have multiple values, but one change record
+            if record[:mail]
+              changes = [
+                {
+                  action: record[:action],
+                  resource_record_set: {
+                    name: record[:name],
+                    type: record[:type],
+                    ttl: record[:ttl] || default_ttl,
+                    resource_records: record[:values],
                   },
-                ],
-              },
-            )
+                },
+              ]
+            # Non-mail records have one change record per value
+            else
+              changes = record[:values].map {|item|
+                change = {
+                  action: record[:action],
+                  resource_record_set: {
+                    name: record[:name],
+                    type: record[:type],
+                    ttl: record[:ttl] || default_ttl,
+                    resource_records: [{ value: item[:value] }],
+                  },
+                }
+                if item[:weight]
+                  change[:resource_record_set].merge!(
+                    weight: item[:weight],
+                    set_identifier: [record[:name], item[:value]].join('-'),
+                  )
+                end
+
+                change
+              }
+            end
           end
+
+          client.change_resource_record_sets(
+            hosted_zone_id: id,
+            change_batch: { changes: changes },
+          )
 
           # TODO: Ensure the record is INSYNC
         rescue Aws::Route53::Errors::ServiceError => e
