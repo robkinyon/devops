@@ -59,25 +59,29 @@ module Zone
   end
 
   def expect_alias_record(opts)
+    if opts[:changes]
+      changes = opts[:changes]
+    else
+      changes = [
+        {
+          action: opts[:action] || 'CREATE',
+          resource_record_set: {
+            name: opts[:name],
+            type: opts[:type],
+            alias_target: {
+              hosted_zone_id: zone_id,
+              dns_name: opts[:value],
+              evaluate_target_health: false,
+            },
+          },
+        },
+      ]
+    end
+
     expect(client).to receive(:change_resource_record_sets).
       with(
         hosted_zone_id: zone_id,
-        change_batch: {
-          changes: [
-            {
-              action: opts[:action] || 'CREATE',
-              resource_record_set: {
-                name: opts[:name],
-                type: opts[:type],
-                alias_target: {
-                  hosted_zone_id: zone_id,
-                  dns_name: opts[:value],
-                  evaluate_target_health: false,
-                },
-              },
-            },
-          ],
-        },
+        change_batch: { changes: changes },
       )
   end
 end

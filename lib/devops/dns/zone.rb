@@ -75,7 +75,7 @@ class DevOps
                    record_for(item[:value], 'CNAME')
           if target
             record[:type] = 'ALIAS'
-            record[:target] = target
+            item[:target] = target
           else
             case item[:value]
             # A numeric IP address is a 'A' record
@@ -120,21 +120,29 @@ class DevOps
       def issue_change_record(record)
         begin
           if record[:type] == 'ALIAS'
-            changes = [
-              {
+            changes = record[:values].map {|item|
+              change = {
                 action: record[:action],
                 resource_record_set: {
                   name: record[:name],
-                  type: record[:target].type,
+                  type: item[:target].type,
                   alias_target: {
                     # Currently, only intra-zone ALIASes are supported.
                     hosted_zone_id: id,
-                    dns_name: record[:target].name,
+                    dns_name: item[:target].name,
                     evaluate_target_health: false,
                   },
                 },
-              },
-            ]
+              }
+              if item[:weight]
+                change[:resource_record_set].merge!(
+                  weight: item[:weight],
+                  set_identifier: [record[:name], item[:target].name].join('-'),
+                )
+              end
+
+              change
+            }
           else
             # Mail records have multiple values, but one change record
             if record[:mail]

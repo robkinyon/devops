@@ -246,12 +246,10 @@ describe DevOps::DNS::Zone do
     end
 
     describe 'weighted records' do
-      it 'creates a 2-record weighted set' do
+      it 'creates a 2-record weighted set of CNAMEs' do
         setup_empty_zone()
 
         expect_change_record(
-          #name: 'www.foo.test',
-          #type: 'CNAME',
           changes: [
             {
               action: 'CREATE',
@@ -287,6 +285,56 @@ describe DevOps::DNS::Zone do
           values: [
             { value: 'www1.bar.test', weight: 3 },
             { value: 'www2.bar.test', weight: 1 },
+          ],
+        )
+      end
+
+      it 'creates a 2-record weighted set of ALIASes' do
+        setup_zone(
+          records([
+            record(name: 'www1.foo.test.', type: 'A'),
+            record(name: 'www2.foo.test.', type: 'A'),
+          ])
+        )
+
+        expect_alias_record(
+          changes: [
+            {
+              action: 'CREATE',
+              resource_record_set: {
+                name: 'www.foo.test',
+                type: 'A',
+                weight: 3,
+                set_identifier: 'www.foo.test-www1.foo.test.',
+                alias_target: {
+                  hosted_zone_id: zone_id,
+                  dns_name: 'www1.foo.test.',
+                  evaluate_target_health: false,
+                },
+              },
+            },
+            {
+              action: 'CREATE',
+              resource_record_set: {
+                name: 'www.foo.test',
+                type: 'A',
+                weight: 1,
+                set_identifier: 'www.foo.test-www2.foo.test.',
+                alias_target: {
+                  hosted_zone_id: zone_id,
+                  dns_name: 'www2.foo.test.',
+                  evaluate_target_health: false,
+                },
+              },
+            },
+          ],
+        )
+
+        zone.ensure_record(
+          name: 'www',
+          values: [
+            { value: 'www1', weight: 3 },
+            { value: 'www2', weight: 1 },
           ],
         )
       end
