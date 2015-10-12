@@ -1,8 +1,9 @@
 class DevOps
   class DNS
     class Record
-      attr_reader :name, :type, :records
-      def initialize(record)
+      attr_reader :name, :type, :records, :parent
+      def initialize(parent, record)
+        @parent = parent
         @name = record.name
         @type = record.type
         @records = []

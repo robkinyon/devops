@@ -14,7 +14,7 @@ describe DevOps::DNS do
     it "can load one zone" do
       setup_zone_list(
         zones(
-          [ zone(id: 'id for foo.test.', name: 'foo.test.') ],
+          [ zone_for(id: 'id for foo.test.', name: 'foo.test.') ],
         )
       )
 
@@ -29,14 +29,14 @@ describe DevOps::DNS do
       setup_paginated_zone_list(
         no_args => [
           zones(
-            [ zone(id: 'id for foo.test.', name: 'foo.test.') ],
+            [ zone_for(id: 'id for foo.test.', name: 'foo.test.') ],
             is_truncated: true,
             marker: 'marker',
           ),
         ],
         { marker: 'marker' } => [
           zones(
-            [ zone(id: 'id for bar.test.', name: 'bar.test.') ],
+            [ zone_for(id: 'id for bar.test.', name: 'bar.test.') ],
           )
         ],
       )
@@ -50,21 +50,21 @@ describe DevOps::DNS do
       setup_paginated_zone_list(
         no_args => [
           zones(
-            [ zone(id: 'id for foo.test.', name: 'foo.test.') ],
+            [ zone_for(id: 'id for foo.test.', name: 'foo.test.') ],
             is_truncated: true,
             marker: 'marker',
           ),
         ],
         { marker: 'marker' } => [
           zones(
-            [ zone(id: 'id for bar.test.', name: 'bar.test.') ],
+            [ zone_for(id: 'id for bar.test.', name: 'bar.test.') ],
             is_truncated: true,
             marker: 'marker2',
           )
         ],
         { marker: 'marker2' } => [
           zones(
-            [ zone(id: 'id for baz.test.', name: 'baz.test.') ],
+            [ zone_for(id: 'id for baz.test.', name: 'baz.test.') ],
           )
         ],
       )
@@ -87,7 +87,7 @@ describe DevOps::DNS do
       setup_zone_list(
         zones(),
         zones(
-          [ zone(id: 'id for foo.test.', name: 'foo.test.') ],
+          [ zone_for(id: 'id for foo.test.', name: 'foo.test.') ],
         ),
       )
 

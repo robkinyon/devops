@@ -10,9 +10,10 @@ class DevOps
           return obj
       end
 
-      attr_reader :client, :id, :default_ttl, :zone_name
-      def initialize(client, data, default_ttl=600)
-        @client = client
+      attr_reader :client, :id, :default_ttl, :zone_name, :parent
+      def initialize(parent, data, default_ttl=600)
+        @parent = parent
+        @client = parent.client
         @id = data.id
         @zone_name = data.name.gsub(/\.$/, '')
         @default_ttl = default_ttl
@@ -71,8 +72,17 @@ class DevOps
         #   * All weights must be /^\d+$/
         #   * If no weights, then only one value
         record[:values].each do |item|
-          target = record_for(item[:value], 'A') ||
-                   record_for(item[:value], 'CNAME')
+          zone = zone_of(item[:value])
+          if zone && zone != zone_name
+            other_zone = parent.zone_for(zone)
+            if other_zone
+              target = other_zone.record_for(item[:value], 'A') ||
+                       other_zone.record_for(item[:value], 'CNAME')
+            end
+          else
+            target = record_for(item[:value], 'A') ||
+                     record_for(item[:value], 'CNAME')
+          end
           if target
             record[:type] = 'ALIAS'
             item[:target] = target
@@ -117,6 +127,16 @@ class DevOps
 
       private
 
+      # FIXME: Get a proper DNS parsing tool
+      def zone_of(proto)
+        (_, match) = *proto.match(/([\w\d]+\.[\w\d]+)\.?$/)
+        if match && !match.match(/^\d+\.\d+$/)
+          match = match + '.' unless match[-1] == '.'
+          return match
+        end
+        return
+      end
+
       def issue_change_record(record)
         begin
           if record[:type] == 'ALIAS'
@@ -127,8 +147,7 @@ class DevOps
                   name: record[:name],
                   type: item[:target].type,
                   alias_target: {
-                    # Currently, only intra-zone ALIASes are supported.
-                    hosted_zone_id: id,
+                    hosted_zone_id: item[:target].parent.id,
                     dns_name: item[:target].name,
                     evaluate_target_health: false,
                   },
@@ -222,7 +241,7 @@ class DevOps
           #if @records[name][type]
           #  @records[name][type].add_record(record)
           #else
-            @records[name][type] = DevOps::DNS::Record.new(record)
+            @records[name][type] = DevOps::DNS::Record.new(self, record)
           #end
         end
       end

@@ -1,12 +1,15 @@
 describe DevOps::DNS::Zone do
   let(:zone_id) { 'id' }
   let(:client) { instance_double('Aws::Route53::Client') }
-  let(:zone) {
-    DevOps::DNS::Zone.new(
-      client,
-      Aws::Route53::Types::HostedZone.new(id: zone_id, name: 'foo.test.'),
+  let(:dns) { DevOps::DNS.new(client) }
+
+  before(:each){
+    setup_zone_list(
+      zones([ zone_for(id: zone_id, name: 'foo.test.') ])
     )
   }
+
+  let(:zone) { dns.zone_for('foo.test.') }
 
   describe '#records' do
     it "can load zero records" do

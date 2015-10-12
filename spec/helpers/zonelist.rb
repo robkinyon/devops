@@ -21,7 +21,7 @@ module ZoneList
     Aws::Route53::Types::ListHostedZonesResponse.new(opts)
   end
 
-  def zone(opts)
+  def zone_for(opts)
     Aws::Route53::Types::HostedZone.new(opts)
   end
 
