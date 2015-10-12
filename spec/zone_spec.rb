@@ -160,6 +160,24 @@ describe DevOps::DNS::Zone do
             value: 'www',
           )
         end
+
+        it 'creates an ALIAS to an ALIAS' do
+          setup_zone(
+            records(
+              [ record(name: 'www.foo.test.', type: 'A', alias_target: true) ],
+            )
+          )
+          expect_alias_record(
+            name: 'foo.test',
+            value: 'www.foo.test.',
+            type: 'A',
+          )
+
+          zone.ensure_record(
+            name: '@',
+            value: 'www',
+          )
+        end
       end
 
       it 'updates a record with one value' do

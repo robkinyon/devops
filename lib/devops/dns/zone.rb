@@ -77,11 +77,13 @@ class DevOps
             other_zone = parent.zone_for(zone)
             if other_zone
               target = other_zone.record_for(item[:value], 'A') ||
-                       other_zone.record_for(item[:value], 'CNAME')
+                       other_zone.record_for(item[:value], 'CNAME') ||
+                       other_zone.record_for(item[:value], 'ALIAS')
             end
           else
             target = record_for(item[:value], 'A') ||
-                     record_for(item[:value], 'CNAME')
+                     record_for(item[:value], 'CNAME') ||
+                     record_for(item[:value], 'ALIAS')
           end
           if target
             record[:type] = 'ALIAS'
@@ -109,7 +111,6 @@ class DevOps
         end
 
         # The AWS API requires fully-qualified names
-        record[:original_name] = record[:name]
         if record[:name] == '@'
           record[:name] = zone_name
         elsif !record[:name].match(/#{zone_name}$/)
