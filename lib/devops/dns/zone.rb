@@ -72,19 +72,9 @@ class DevOps
         #   * All weights must be /^\d+$/
         #   * If no weights, then only one value
         record[:values].each do |item|
-          zone = zone_of(item[:value])
-          if zone && zone != zone_name
-            other_zone = parent.zone_for(zone)
-            if other_zone
-              target = other_zone.record_for(item[:value], 'A') ||
-                       other_zone.record_for(item[:value], 'CNAME') ||
-                       other_zone.record_for(item[:value], 'ALIAS')
-            end
-          else
-            target = record_for(item[:value], 'A') ||
-                     record_for(item[:value], 'CNAME') ||
-                     record_for(item[:value], 'ALIAS')
-          end
+          target = record_for(item[:value], 'A') ||
+                   record_for(item[:value], 'CNAME') ||
+                   record_for(item[:value], 'ALIAS')
           if target
             record[:type] = 'ALIAS'
             item[:target] = target
@@ -127,16 +117,6 @@ class DevOps
       end
 
       private
-
-      # FIXME: Get a proper DNS parsing tool
-      def zone_of(proto)
-        (_, match) = *proto.match(/([\w\d]+\.[\w\d]+)\.?$/)
-        if match && !match.match(/^\d+\.\d+$/)
-          match = match + '.' unless match[-1] == '.'
-          return match
-        end
-        return
-      end
 
       def issue_change_record(record)
         begin
