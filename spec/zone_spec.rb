@@ -139,22 +139,24 @@ describe DevOps::DNS::Zone do
         )
       end
 
-      it 'creates a ALIAS value' do
-        setup_zone(
-          records(
-            [ record(name: 'www.foo.test.', type: 'A') ],
+      describe 'for ALIAS' do
+        it 'creates an intra-zone value' do
+          setup_zone(
+            records(
+              [ record(name: 'www.foo.test.', type: 'A') ],
+            )
           )
-        )
-        expect_alias_record(
-          name: 'www2.foo.test',
-          value: 'www.foo.test.',
-          type: 'A',
-        )
+          expect_alias_record(
+            name: 'www2.foo.test',
+            value: 'www.foo.test.',
+            type: 'A',
+          )
 
-        zone.ensure_record(
-          name: 'www2',
-          value: 'www',
-        )
+          zone.ensure_record(
+            name: 'www2',
+            value: 'www',
+          )
+        end
       end
 
       it 'updates a record with one value' do
@@ -337,6 +339,19 @@ describe DevOps::DNS::Zone do
             { value: 'www2', weight: 1 },
           ],
         )
+      end
+
+      if false
+      describe 'modifies' do
+        it 'AB to AB' do
+        end
+        it 'AB to ABC' do
+        end
+        it 'AB to BC' do
+        end
+        it 'AB to CD' do
+        end
+      end
       end
     end
   end

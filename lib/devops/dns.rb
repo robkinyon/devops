@@ -59,7 +59,7 @@ class DevOps
       end
 
       @zones = zones.map {|e|
-        [ e.name, DevOps::DNS::Zone.new(client, e)]
+        [e.name, DevOps::DNS::Zone.new(client, e)]
       }.to_h
     end
     alias_method :refresh_zones, :load_zones
